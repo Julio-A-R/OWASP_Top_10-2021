@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Explorateur Interactif de l'OWASP Top 10:2021</title>
+    <!-- Chosen Palette: Harmonie Sereine (Beige, Ardoise, Bleu Doux, Vert Sûr, Rouge Alerte) -->
+    <!-- Application Structure Plan: L'application utilise une structure de tableau de bord avec une navigation latérale fixe et une zone de contenu dynamique. Cette architecture a été choisie pour gérer la densité d'informations du rapport. La navigation latérale offre un accès direct et constant aux 10 vulnérabilités et à la section d'analyse, favorisant une exploration non linéaire. La zone de contenu principale utilise un système d'onglets pour chaque vulnérabilité (Vue d'ensemble, Exemples de code, Mitigation, Analyse), segmentant l'information en morceaux digestes. Cette approche améliore considérablement la convivialité par rapport à un long défilement, permettant aux utilisateurs de se concentrer sur des aspects spécifiques (par exemple, comparer uniquement les exemples de code) sans être submergés. -->
+    <!-- Visualization & Content Choices: 
+        - Rapport Info: Classement OWASP 2017 vs 2021. Goal: Comparer. Viz: Graphique à barres horizontales groupées. Interaction: Survol pour afficher des détails sur les changements. Justification: Visualisation directe et efficace des changements de classement, des nouvelles entrées et des fusions. Library: Chart.js.
+        - Rapport Info: Détails de chaque vulnérabilité (description, causes, impacts). Goal: Informer. Viz: Cartes d'information structurées avec des icônes (Unicode) et du texte. Interaction: Contenu statique mais segmenté. Justification: Présentation aérée et visuellement engageante qui met en évidence les informations clés. Library: HTML/Tailwind.
+        - Rapport Info: Exemples de code vulnérable et sécurisé. Goal: Éduquer/Comparer. Viz: Blocs de code côte à côte avec une coloration syntaxique de base via CSS. Interaction: Onglet dédié pour isoler la comparaison de code. Justification: Facilite la compréhension des erreurs et des corrections en les présentant directement en opposition. Library: HTML/CSS.
+        - Rapport Info: Stratégies de mitigation. Goal: Actionner. Viz: Listes à puces de type checklist. Interaction: Contenu statique. Justification: Présente les mesures de défense comme des étapes claires et applicables. Library: HTML/Tailwind.
+        - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. 
+    -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f8f7f4;
+        color: #3d4752;
+      }
+      .chart-container {
+        position: relative;
+        width: 100%;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+        height: 450px;
+        max-height: 60vh;
+      }
+      @media (max-width: 768px) {
+        .chart-container {
+          height: 400px;
+        }
+      }
+      .nav-link {
+        transition: all 0.2s ease-in-out;
+        border-left: 3px solid transparent;
+      }
+      .nav-link.active {
+        background-color: #e9e7e2;
+        border-left-color: #60a5fa; /* accent-blue-400 */
+        color: #1e3a8a; /* text-blue-900 */
+      }
+      .nav-link:hover {
+        background-color: #e9e7e2;
+      }
+      .tab-button {
+        transition: all 0.2s ease-in-out;
+        border-bottom: 2px solid transparent;
+      }
+      .tab-button.active {
+        border-bottom-color: #60a5fa;
+        color: #1e3a8a;
+      }
+      .code-block {
+        background-color: #1e293b; /* slate-800 */
+        color: #e2e8f0; /* slate-200 */
+        padding: 1rem;
+        border-radius: 0.5rem;
+        font-family: "Courier New", Courier, monospace;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        overflow-x: auto;
+      }
+      .code-block .comment {
+        color: #64748b;
+      } /* slate-500 */
+      .code-block .keyword {
+        color: #f472b6;
+      } /* pink-400 */
+      .code-block .string {
+        color: #a7f3d0;
+      } /* emerald-200 */
+      .code-block .class-name {
+        color: #67e8f9;
+      } /* cyan-300 */
+      .content-fade-in {
+        animation: fadeIn 0.5s ease-in-out;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+  <body class="min-h-screen">
+    <div class="flex flex-col md:flex-row min-h-screen">
+      <aside
+        class="w-full md:w-64 lg:w-72 bg-white/50 backdrop-blur-sm border-r border-gray-200/80 p-4 shrink-0"
+      >
+        <h1 class="text-xl font-bold text-blue-900/80 mb-6">OWASP Top 10</h1>
+        <nav id="main-nav" class="space-y-1"></nav>
+        <div
+          class="absolute bottom-0 left-0 right-0 bg-white/50 backdrop-blur-sm border-t border-gray-200/80 p-4 text-center text-sm text-gray-600"
+        >
+          &copy; 2025 Andomahefa Julio Rakotomalala. All rights reserved.
+        </div>
+      </aside>
+
+      <main
+        id="main-content"
+        class="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto"
+      ></main>
+    </div>
+
+    <script>
+      const owaspData = {
+        introduction: {
+          title: "Bienvenue dans l'Explorateur Interactif OWASP Top 10",
+          content: `
+            <div class="prose max-w-none">
+                <p class="text-lg">Cette application est une adaptation interactive du rapport d'expert sur les risques de sécurité des applications web de l'OWASP Top 10 pour 2021. L'OWASP Top 10 est un document de sensibilisation reconnu mondialement qui représente un consensus sur les risques de sécurité les plus critiques.</p>
+                <p>Utilisez la navigation sur la gauche pour explorer en profondeur chaque vulnérabilité. Chaque section contient une description détaillée, des exemples de code concrets pour illustrer les failles et leurs corrections, des stratégies de mitigation claires et une analyse approfondie des tendances et des implications.</p>
+                <div class="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h3 class="text-lg font-semibold text-blue-800">Comment utiliser cet outil :</h3>
+                    <ul class="list-disc list-inside mt-2 space-y-1">
+                        <li><strong>Navigation :</strong> Cliquez sur une vulnérabilité (A01 à A10) ou sur "Évolution 2017-2021" dans le menu.</li>
+                        <li><strong>Onglets :</strong> Dans chaque section de vulnérabilité, utilisez les onglets pour basculer entre la vue d'ensemble, les exemples de code, les stratégies de mitigation et l'analyse.</li>
+                        <li><strong>Interactivité :</strong> Survolez les barres du graphique d'évolution pour obtenir des informations contextuelles.</li>
+                    </ul>
+                </div>
+            </div>
+        `,
+        },
+        evolution: {
+          title: "Évolution de l'OWASP Top 10 : 2017 vs 2021",
+          content: `
+            <div class="prose max-w-none">
+                <p>L'OWASP Top 10 est un document dynamique qui reflète l'évolution du paysage des menaces. La version 2021 a introduit des changements significatifs par rapport à 2017, notamment de nouvelles catégories comme la "Conception Dangereuse" et le "SSRF", et la consolidation d'autres comme l'injection et le XSS. Ce graphique illustre les changements de classement et la structure des catégories entre les deux versions.</p>
+            </div>
+            <div class="mt-8 chart-container">
+                <canvas id="evolutionChart"></canvas>
+            </div>
+        `,
+        },
+        A01: {
+          id: "A01:2021",
+          name: "Contrôle d'Accès Défaillant",
+          tabs: {
+            overview: {
+              title: "Vue d'ensemble",
+              content: `
+                    <p class="mb-4">Le contrôle d'accès défaillant se classe au premier rang car 94% des applications testées présentaient une forme de cette vulnérabilité. Il se produit lorsque les restrictions sur ce que les utilisateurs authentifiés sont autorisés à faire ne sont pas correctement appliquées. Les attaquants peuvent exploiter ces failles pour accéder à des fonctionnalités et/ou des données non autorisées, telles que l'accès aux comptes d'autres utilisateurs, la visualisation de fichiers sensibles, la modification des données d'autres utilisateurs, la modification des droits d'accès, etc.</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-red-800">Causes Courantes</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Violation du principe du moindre privilège.</li>
+                                <li>Contournement des vérifications en modifiant l'URL, l'état interne, etc.</li>
+                                <li>Références directes d'objets non sécurisées (IDOR).</li>
+                                <li>Permissions d'API manquantes pour POST, PUT, DELETE.</li>
+                                <li>Élévation de privilèges.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-yellow-800">Impacts Métier</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Divulgation, modification ou destruction non autorisée de toutes les données.</li>
+                                <li>Exécution de fonctions métier hors des limites de l'utilisateur.</li>
+                                <li>Prise de contrôle de compte ou du site complet.</li>
+                            </ul>
+                        </div>
+                    </div>
+                `,
+            },
+            code: {
+              title: "Exemples de Code",
+              content: `
+                    <p class="mb-4">L'exemple le plus courant de contrôle d'accès défaillant est la référence directe d'objet non sécurisée (IDOR). L'application utilise une entrée fournie par l'utilisateur pour accéder directement à un objet en base de données sans vérifier si l'utilisateur est autorisé à y accéder.</p>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2 text-red-700">🔴 Code Vulnérable (Java)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// L'application récupère un compte via l'URL sans vérifier les droits</span>
+<span class="keyword">public void</span> <span class="function">doGet</span>(HttpServletRequest request, ...) {
+    String accountId = request.getParameter(<span class="string">"accountId"</span>);
+    
+    <span class="comment">// ATTENTION: Aucune vérification pour savoir si l'utilisateur
+    // authentifié est le propriétaire du compte 'accountId'.</span>
+    User accountInfo = userService.getAccountDetails(accountId);
+    
+    <span class="comment">// Affiche les infos, même si elles appartiennent à un autre utilisateur.</span>
+}</code></pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2 text-green-700">🟢 Code Sécurisé (Java avec Spring Security)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Le contrôleur vérifie la propriété du compte</span>
+@GetMapping(<span class="string">"/{accountId}"</span>)
+<span class="keyword">public</span> ResponseEntity&lt;User&gt; getAccountDetails(
+        @PathVariable String accountId, Principal principal) {
+    
+    <span class="comment">// Récupère l'ID de l'utilisateur authentifié</span>
+    String authenticatedUserId = principal.getName();
+
+    <span class="comment">// VÉRIFICATION: Compare l'ID demandé à l'ID authentifié</span>
+    <span class="keyword">if</span> (!accountId.equals(authenticatedUserId)) {
+        <span class="keyword">return new</span> ResponseEntity&lt;&gt;(HttpStatus.FORBIDDEN);
+    }
+    
+    User accountInfo = userService.getAccountDetails(accountId);
+    <span class="keyword">return new</span> ResponseEntity&lt;&gt;(accountInfo, HttpStatus.OK);
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `,
+            },
+            mitigation: {
+              title: "Stratégies de Mitigation",
+              content: `
+                    <ul class="space-y-3">
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Refuser par défaut :</strong> Implémentez des mécanismes de contrôle d'accès une seule fois et réutilisez-les dans toute l'application, en refusant tout accès par défaut.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Centraliser les contrôles :</strong> Modélisez les contrôles d'accès pour imposer la propriété des enregistrements, plutôt que d'accepter que l'utilisateur puisse créer, lire, mettre à jour ou supprimer n'importe quel enregistrement.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Invalider les jetons :</strong> Invalidez les jetons JWT côté serveur après la déconnexion.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Limiter le débit :</strong> Limitez le débit des requêtes API pour minimiser les dommages causés par les outils automatisés.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Journaliser les échecs :</strong> Enregistrez les échecs de contrôle d'accès et alertez les administrateurs lorsque cela est approprié.</span></li>
+                    </ul>
+                `,
+            },
+            analysis: {
+              title: "Analyse Approfondie",
+              content: `
+                    <p>L'ascension du Contrôle d'Accès Défaillant à la première place souligne une évolution significative de la complexité des applications. Ce n'est plus seulement une question d'erreurs de codage isolées, mais de la manière dont les autorisations sont gérées à travers des architectures distribuées (API, microservices). La prévalence des vulnérabilités IDOR est un exemple frappant. Les développeurs supposent souvent à tort que l'authentification implique l'autorisation, menant à des failles de conception où la confiance dans les entrées client n'est pas vérifiée côté serveur. Cela exige une mentalité de "refus par défaut" et des cadres de contrôle d'accès plus robustes et centralisés.</p>
+                `,
+            },
+          },
+        },
+        A02: {
+          id: "A02:2021",
+          name: "Défaillances Cryptographiques",
+          tabs: {
+            overview: {
+              title: "Vue d'ensemble",
+              content: `
+                    <p class="mb-4">Précédemment "Exposition de Données Sensibles", cette catégorie monte en deuxième position et se concentre sur les défaillances liées à la cryptographie. Elle concerne souvent des données qui devraient être protégées, comme les mots de passe, les numéros de carte de crédit, les dossiers de santé, les informations personnelles et les secrets d'entreprise. Les failles peuvent inclure la transmission de données en clair, l'utilisation d'algorithmes faibles ou obsolètes, ou une mauvaise gestion des clés.</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-red-800">Causes Courantes</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Stockage ou transmission de données en clair (HTTP, SMTP, FTP).</li>
+                                <li>Algorithmes cryptographiques anciens ou faibles (MD5, SHA-1).</li>
+                                <li>Mauvaise gestion des clés (clés codées en dur, stockage non sécurisé).</li>
+                                <li>Hachage de mot de passe faible (sans sel).</li>
+                                <li>Génération de nombres aléatoires non sécurisée.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-yellow-800">Impacts Métier</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Amendes réglementaires importantes (RGPD, HIPAA).</li>
+                                <li>Vol d'identité et fraude.</li>
+                                <li>Compromission de systèmes entiers.</li>
+                                <li>Perte de réputation et de confiance des clients.</li>
+                            </ul>
+                        </div>
+                    </div>
+                `,
+            },
+            code: {
+              title: "Exemples de Code",
+              content: `
+                    <p class="mb-4">Un exemple classique est le stockage de mots de passe en utilisant un algorithme de hachage faible et non salé. Cela rend les mots de passe stockés vulnérables aux attaques par force brute et par tables arc-en-ciel si la base de données est compromise.</p>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2 text-red-700">🔴 Code Vulnérable (Java)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Hachage de mot de passe avec SHA-1 (faible et non salé)</span>
+<span class="keyword">public static</span> String <span class="function">hashPassword</span>(String password) {
+    <span class="keyword">try</span> {
+        MessageDigest md = MessageDigest.getInstance(<span class="string">"SHA-1"</span>);
+        <span class="keyword">byte</span>[] hashedPassword = md.digest(password.getBytes());
+        <span class="comment">// Ce hachage est facilement cassable</span>
+        <span class="keyword">return</span> Base64.getEncoder().encodeToString(hashedPassword);
+    } <span class="keyword">catch</span> (NoSuchAlgorithmException e) {
+        <span class="keyword">throw new</span> RuntimeException(e);
+    }
+}</code></pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2 text-green-700">🟢 Code Sécurisé (Java avec BCrypt)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Hachage fort, adaptatif et salé avec BCrypt</span>
+<span class="keyword">public static</span> String <span class="function">hashPassword</span>(String password) {
+    BCryptPasswordEncoder passwordEncoder = 
+        <span class="keyword">new</span> <span class="class-name">BCryptPasswordEncoder</span>();
+    
+    <span class="comment">// BCrypt gère automatiquement le salage et est lent
+    // par conception pour résister à la force brute.</span>
+    <span class="keyword">return</span> passwordEncoder.encode(password);
+}
+
+<span class="keyword">public static boolean</span> <span class="function">verifyPassword</span>(String raw, String encoded) {
+    BCryptPasswordEncoder passwordEncoder = 
+        <span class="keyword">new</span> <span class="class-name">BCryptPasswordEncoder</span>();
+    <span class="keyword">return</span> passwordEncoder.matches(raw, encoded);
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `,
+            },
+            mitigation: {
+              title: "Stratégies de Mitigation",
+              content: `
+                    <ul class="space-y-3">
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Classifier les données :</strong> Identifiez les données sensibles et ne les stockez pas inutilement.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Chiffrer au repos et en transit :</strong> Utilisez des algorithmes robustes pour chiffrer les données stockées et TLS 1.2+ avec HSTS pour les données en transit.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Utiliser un hachage fort :</strong> Stockez les mots de passe avec des fonctions de hachage robustes, adaptatives et salées comme Argon2, scrypt ou BCrypt.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Gérer les clés correctement :</strong> Assurez une gestion des clés sécurisée et ne codez jamais les clés en dur.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Éviter les algorithmes obsolètes :</strong> N'utilisez pas de fonctions cryptographiques dépréciées comme MD5, SHA1 ou PKCS#1 v1.5.</span></li>
+                    </ul>
+                `,
+            },
+            analysis: {
+              title: "Analyse Approfondie",
+              content: `
+                    <p>Le renommage en "Défaillances Cryptographiques" souligne que le problème n'est pas seulement la présence de données sensibles, mais l'échec de leur protection. La simple utilisation du chiffrement est insuffisante; la qualité et l'application correcte des principes cryptographiques sont primordiales. La persistance de l'utilisation de hachages faibles, malgré l'existence de solutions robustes et bien documentées comme BCrypt, met en lumière une lacune dans l'éducation des développeurs et une adhésion insuffisante aux meilleures pratiques, souvent à cause de systèmes hérités ou d'un manque de sensibilisation.</p>
+                `,
+            },
+          },
+        },
+        A03: {
+          id: "A03:2021",
+          name: "Injection",
+          tabs: {
+            overview: {
+              title: "Vue d'ensemble",
+              content: `
+                    <p class="mb-4">Les failles d'injection descendent à la troisième position. 94% des applications ont été testées pour une forme d'injection. Cette catégorie inclut désormais le Cross-Site Scripting (XSS). Une faille d'injection se produit lorsqu'une application inclut des données non fiables dans une commande ou une requête. Les données hostiles de l'attaquant peuvent tromper l'interpréteur pour qu'il exécute des commandes non intentionnelles ou accède à des données sans autorisation appropriée.</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-red-800">Types d'Injection</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Injection SQL (SQLi)</li>
+                                <li>Cross-Site Scripting (XSS)</li>
+                                <li>Injection de commandes OS</li>
+                                <li>Injection NoSQL</li>
+                                <li>Injection LDAP</li>
+                            </ul>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-yellow-800">Impacts Métier</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Perte ou corruption de données, voire prise de contrôle du système.</li>
+                                <li>Détournement de session utilisateur (via XSS).</li>
+                                <li>Exfiltration de données sensibles.</li>
+                                <li>Défiguration de sites web et atteinte à la réputation.</li>
+                            </ul>
+                        </div>
+                    </div>
+                `,
+            },
+            code: {
+              title: "Exemples de Code",
+              content: `
+                    <p class="mb-4">L'injection SQL est un exemple classique. Elle se produit lorsque l'entrée utilisateur est directement concaténée dans une chaîne de requête SQL, permettant à un attaquant de manipuler la requête.</p>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2 text-red-700">🔴 Code Vulnérable (Java - SQLi)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Concaténation de chaîne directe</span>
+String userId = request.getParameter(<span class="string">"id"</span>);
+String query = <span class="string">"SELECT * FROM accounts WHERE custID = '"</span> + userId + <span class="string">"'"</span>;
+
+<span class="comment">// Si userId est "1' OR '1'='1", la requête renvoie tout.</span>
+Statement stmt = connection.createStatement();
+ResultSet rs = stmt.executeQuery(query);</code></pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2 text-green-700">🟢 Code Sécurisé (Java - PreparedStatement)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Utilisation de requêtes paramétrées (prepared statements)</span>
+String userId = request.getParameter(<span class="string">"id"</span>);
+String query = <span class="string">"SELECT * FROM accounts WHERE custID = ?"</span>;
+
+PreparedStatement pstmt = connection.prepareStatement(query);
+<span class="comment">// L'entrée est traitée comme donnée, pas comme code.</span>
+pstmt.setString(1, userId);
+
+ResultSet rs = pstmt.executeQuery();</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `,
+            },
+            mitigation: {
+              title: "Stratégies de Mitigation",
+              content: `
+                    <ul class="space-y-3">
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Séparer les données des commandes :</strong> La méthode préférée est d'utiliser des API sûres qui évitent l'interpréteur, comme les requêtes paramétrées ou les ORM.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Validation d'entrée côté serveur :</strong> Utilisez une validation positive (liste blanche) pour valider toutes les entrées utilisateur.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Encodage de sortie :</strong> Encodez les données non fiables avant de les afficher pour prévenir les attaques XSS, en utilisant un encodage contextuel approprié.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Utiliser LIMIT :</strong> Limitez le nombre de résultats retournés par les requêtes pour empêcher la divulgation massive de données en cas d'injection.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Mettre en place une CSP :</strong> Utilisez une Politique de Sécurité de Contenu (Content Security Policy) pour réduire la gravité des failles XSS.</span></li>
+                    </ul>
+                `,
+            },
+            analysis: {
+              title: "Analyse Approfondie",
+              content: `
+                    <p>La persistance de l'injection, malgré des décennies de sensibilisation, est un fait marquant. L'élargissement de la catégorie pour inclure le XSS renforce l'idée que le problème fondamental est le traitement inapproprié de données non fiables comme du code exécutable. Cela peut s'expliquer par la complexité croissante des applications et une "confiance aveugle" dans les frameworks, qui ne protègent pas toujours par défaut. Un besoin continu de formation pratique sur l'échappement contextuel et l'utilisation correcte des API sécurisées est essentiel.</p>
+                `,
+            },
+          },
+        },
+        A04: {
+          id: "A04:2021",
+          name: "Conception Dangereuse",
+          tabs: {
+            overview: {
+              title: "Vue d'ensemble",
+              content: `
+                    <p class="mb-4">C'est une nouvelle catégorie pour 2021, qui se concentre sur les risques liés aux défauts de conception et d'architecture. Elle représente un appel à utiliser davantage la modélisation des menaces, les modèles de conception sécurisés et les architectures de référence. Une conception non sécurisée ne peut pas être corrigée par une implémentation parfaite. Si les contrôles de sécurité nécessaires n'ont jamais été conçus, un code impeccable ne pourra pas compenser cette lacune.</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-red-800">Exemples de Conception Dangereuse</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Processus de récupération de mot de passe basé sur des questions secrètes.</li>
+                                <li>Manque de protection contre les attaques automatisées (bots).</li>
+                                <li>Absence de limitation de débit pour les fonctions critiques.</li>
+                                <li>Privilèges excessifs accordés aux utilisateurs de base de données.</li>
+                                <li>Logique métier défaillante qui peut être exploitée (ex: achats illimités).</li>
+                            </ul>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-yellow-800">Impacts Métier</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Pertes financières massives.</li>
+                                <li>Compromission de comptes à grande échelle.</li>
+                                <li>Déni de service (DoS) par épuisement des ressources.</li>
+                                <li>Atteinte grave à la réputation de la marque.</li>
+                            </ul>
+                        </div>
+                    </div>
+                `,
+            },
+            code: {
+              title: "Exemples de Code",
+              content: `
+                    <p class="mb-4">La conception dangereuse est moins une question de code qu'une question de logique et d'architecture. Il n'y a pas de "code vulnérable" typique, mais plutôt l'absence de code ou de contrôles là où ils devraient être. L'exemple ci-dessous est conceptuel.</p>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2 text-red-700">🔴 Conception Vulnérable (Logique)</h4>
+                            <div class="p-4 bg-red-50 rounded-lg border border-red-200">
+                                <p class="font-mono text-sm">
+                                    <strong>Scénario :</strong> Un site de cinéma permet de réserver des places.
+                                    <br><br>
+                                    <strong>Faille de conception :</strong> Il n'y a pas de limite au nombre de places qu'un utilisateur peut réserver en une seule transaction, et aucun contrôle sur la fréquence des réservations.
+                                    <br><br>
+                                    <strong>Attaque :</strong> Un bot peut réserver toutes les places pour toutes les séances en quelques secondes, créant un déni de service pour les utilisateurs légitimes et permettant à l'attaquant de revendre les places.
+                                </p>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2 text-green-700">🟢 Conception Sécurisée (Logique)</h4>
+                            <div class="p-4 bg-green-50 rounded-lg border border-green-200">
+                                <p class="font-mono text-sm">
+                                    <strong>Scénario :</strong> Le même site de cinéma.
+                                    <br><br>
+                                    <strong>Conception robuste :</strong>
+                                    <ul class="list-disc list-inside mt-2">
+                                        <li><strong>Limitation de débit :</strong> Un utilisateur ne peut faire qu'une réservation toutes les 30 secondes.</li>
+                                        <li><strong>Logique métier :</strong> Le nombre de places par transaction est limité à 10.</li>
+                                        <li><strong>Protection anti-bot :</strong> Un CAPTCHA est déclenché après 3 tentatives de réservation infructueuses.</li>
+                                    </ul>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                `,
+            },
+            mitigation: {
+              title: "Stratégies de Mitigation",
+              content: `
+                    <ul class="space-y-3">
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Adopter un SDLC sécurisé :</strong> Intégrez la sécurité à chaque étape du cycle de vie du développement.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Utiliser la modélisation des menaces :</strong> Analysez les flux de travail critiques pour identifier les failles de conception potentielles.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Utiliser des modèles de conception sécurisés :</strong> Établissez une bibliothèque de composants et de modèles de conception sécurisés et prêts à l'emploi.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Implémenter des vérifications de plausibilité :</strong> Validez la logique métier à chaque niveau de l'application.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Ségréger les couches :</strong> Séparez les couches de l'application en fonction des besoins de protection et de l'exposition.</span></li>
+                    </ul>
+                `,
+            },
+            analysis: {
+              title: "Analyse Approfondie",
+              content: `
+                    <p>L'introduction de la "Conception Dangereuse" est un tournant. Elle affirme qu'une "conception non sécurisée ne peut pas être corrigée par une implémentation parfaite", déplaçant une partie de la responsabilité de la sécurité des développeurs vers les architectes logiciels et les chefs de projet. Cela met en lumière la nécessité d'intégrer la modélisation des menaces et les principes de "secure by design" dès le début d'un projet. Le coût de la correction d'une faille de conception augmentant de manière exponentielle avec le temps, une approche proactive est non seulement plus sûre, mais aussi plus rentable.</p>
+                `,
+            },
+          },
+        },
+        A05: {
+          id: "A05:2021",
+          name: "Mauvaise Configuration de Sécurité",
+          tabs: {
+            overview: {
+              title: "Vue d'ensemble",
+              content: `
+                    <p class="mb-4">Cette catégorie monte de la 6ème à la 5ème position et inclut désormais la vulnérabilité XML External Entities (XXE) de 2017. Elle résulte de l'oubli de durcir suffisamment la sécurité de toute partie de la pile applicative ou de la mauvaise configuration des permissions sur les services cloud. Elle est souvent le résultat d'erreurs humaines, de l'acceptation des configurations par défaut ou de l'absence de processus de durcissement standardisés.</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-red-800">Causes Courantes</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Fonctionnalités, ports, services ou comptes inutiles activés.</li>
+                                <li>Comptes par défaut avec mots de passe inchangés.</li>
+                                <li>Messages d'erreur trop verbeux (traces de pile).</li>
+                                <li>Permissions cloud mal configurées (ex: buckets S3 publics).</li>
+                                <li>Listage de répertoires activé sur le serveur web.</li>
+                                <li>En-têtes de sécurité HTTP manquants ou mal configurés.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-yellow-800">Impacts Métier</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Accès non autorisé au système.</li>
+                                <li>Fuite de données sensibles.</li>
+                                <li>Exécution de code à distance (via XXE).</li>
+                                <li>Cartographie complète du système de fichiers et du réseau interne.</li>
+                            </ul>
+                        </div>
+                    </div>
+                `,
+            },
+            code: {
+              title: "Exemples de Code",
+              content: `
+                    <p class="mb-4">La mauvaise configuration est souvent dans les fichiers de configuration plutôt que dans le code applicatif. Un exemple classique est d'autoriser le listage des répertoires sur un serveur web, ce qui peut exposer la structure de l'application et des fichiers sensibles.</p>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2 text-red-700">🔴 Configuration Vulnérable (Apache Tomcat web.xml)</h4>
+                            <div class="code-block">
+                                <pre><code>&lt;servlet&gt;
+    &lt;servlet-name&gt;default&lt;/servlet-name&gt;
+    &lt;servlet-class&gt;...DefaultServlet&lt;/servlet-class&gt;
+    &lt;init-param&gt;
+        &lt;param-name&gt;listings&lt;/param-name&gt;
+        <span class="comment">&lt;!-- 'true' active le listage de répertoire --&gt;</span>
+        &lt;param-value&gt;true&lt;/param-value&gt;
+    &lt;/init-param&gt;
+&lt;/servlet&gt;</code></pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2 text-green-700">🟢 Configuration Sécurisée (Apache Tomcat web.xml)</h4>
+                            <div class="code-block">
+                                <pre><code>&lt;servlet&gt;
+    &lt;servlet-name&gt;default&lt;/servlet-name&gt;
+    &lt;servlet-class&gt;...DefaultServlet&lt;/servlet-class&gt;
+    &lt;init-param&gt;
+        &lt;param-name&gt;listings&lt;/param-name&gt;
+        <span class="comment">&lt;!-- 'false' désactive le listage de répertoire --&gt;</span>
+        &lt;param-value&gt;false&lt;/param-value&gt;
+    &lt;/init-param&gt;
+&lt;/servlet&gt;</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `,
+            },
+            mitigation: {
+              title: "Stratégies de Mitigation",
+              content: `
+                    <ul class="space-y-3">
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Processus de durcissement :</strong> Établissez un processus répétable et automatisé pour durcir les configurations de tous les environnements.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Surface d'attaque minimale :</strong> Désactivez ou supprimez toutes les fonctionnalités, ports, services et comptes inutiles.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Automatiser la configuration :</strong> Utilisez des outils d'Infrastructure as Code (IaC) pour automatiser et valider les configurations de manière cohérente.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Configurer les en-têtes de sécurité :</strong> Assurez-vous que les en-têtes HTTP de sécurité (HSTS, CSP, etc.) sont présents et correctement configurés.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Gérer les erreurs :</strong> Configurez des pages d'erreur personnalisées pour ne pas divulguer d'informations sensibles comme les traces de pile.</span></li>
+                    </ul>
+                `,
+            },
+            analysis: {
+              title: "Analyse Approfondie",
+              content: `
+                    <p>L'augmentation de cette catégorie reflète la complexité croissante des environnements modernes (cloud, conteneurs, microservices) où les points de configuration sont multiples et faciles à négliger. La cause principale est souvent l'erreur humaine ou le manque de surveillance. La contradiction entre sécurité et convivialité est pertinente ici; des contrôles peuvent être désactivés pour des raisons de commodité. Cela souligne l'urgence d'automatiser la gestion des configurations (IaC) et d'adopter une approche "sécurisée par défaut" pour que les configurations de base soient sûres dès le départ.</p>
+                `,
+            },
+          },
+        },
+        A06: {
+          id: "A06:2021",
+          name: "Composants Vulnérables et Obsolètes",
+          tabs: {
+            overview: {
+              title: "Vue d'ensemble",
+              content: `
+                    <p class="mb-4">Cette catégorie monte à la 6ème position et concerne les risques liés à l'utilisation de dépendances (bibliothèques, frameworks) tierces ou open source qui ont des vulnérabilités connues. Le développement logiciel moderne repose massivement sur ces composants, créant une "chaîne d'approvisionnement logicielle" qui doit être sécurisée. Les composants s'exécutent généralement avec les mêmes privilèges que l'application, donc une faille dans un composant peut avoir des conséquences désastreuses.</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-red-800">Causes Courantes</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Manque d'inventaire des composants et de leurs versions.</li>
+                                <li>Utilisation de logiciels non pris en charge, obsolètes ou non patchés.</li>
+                                <li>Absence de scan régulier des vulnérabilités (SCA).</li>
+                                <li>Délais trop longs pour appliquer les correctifs de sécurité.</li>
+                                <li>Obtention de composants depuis des sources non fiables.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-yellow-800">Impacts Métier</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Exécution de code à distance (RCE), comme avec Log4Shell ou Struts.</li>
+                                <li>Fuites de données massives et brèches de conformité.</li>
+                                <li>Prise de contrôle complète du serveur ou de l'application.</li>
+                                <li>Dommages importants à la réputation et à la confiance.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-4 bg-gray-100 rounded-lg">
+                        <h4 class="font-semibold">Exemple notoire : Log4Shell (CVE-2021-44228)</h4>
+                        <p class="text-sm mt-2">Une vulnérabilité critique dans la bibliothèque de journalisation Java Log4j, largement utilisée, permettait l'exécution de code à distance non authentifiée via une simple chaîne de caractères dans un log. Cet incident a mis en évidence la dépendance systémique à des composants open source et l'impact catastrophique qu'une seule faille peut avoir sur l'écosystème mondial.</p>
+                    </div>
+                `,
+            },
+            code: {
+              title: "Exemples de Code",
+              content: `
+                    <p class="mb-4">Cette vulnérabilité ne se situe pas dans le code que vous écrivez directement, mais dans les dépendances que vous importez. L'exemple ci-dessous illustre comment une version vulnérable d'une bibliothèque est déclarée dans un projet.</p>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2 text-red-700">🔴 Dépendance Vulnérable (Maven pom.xml)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">&lt;!-- Exemple avec une version vulnérable de Log4j --&gt;</span>
+&lt;dependency&gt;
+    &lt;groupId&gt;org.apache.logging.log4j&lt;/groupId&gt;
+    &lt;artifactId&gt;log4j-core&lt;/artifactId&gt;
+    <span class="comment">&lt;!-- Version 2.14.1 et antérieures sont vulnérables à Log4Shell --&gt;</span>
+    &lt;version&gt;2.14.1&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2 text-green-700">🟢 Dépendance Sécurisée (Maven pom.xml)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">&lt;!-- Mise à jour vers une version corrigée --&gt;</span>
+&lt;dependency&gt;
+    &lt;groupId&gt;org.apache.logging.log4j&lt;/groupId&gt;
+    &lt;artifactId&gt;log4j-core&lt;/artifactId&gt;
+    <span class="comment">&lt;!-- Mettre à jour vers 2.17.1 ou plus récent pour les correctifs --&gt;</span>
+    &lt;version&gt;2.17.1&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `,
+            },
+            mitigation: {
+              title: "Stratégies de Mitigation",
+              content: `
+                    <ul class="space-y-3">
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Faire un inventaire :</strong> Supprimez les dépendances, fonctionnalités, composants, fichiers et documentations inutilisés.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Scanner en continu :</strong> Utilisez des outils d'analyse de composition logicielle (SCA) comme OWASP Dependency Check pour identifier en continu les composants vulnérables.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Utiliser des sources fiables :</strong> Obtenez des composants uniquement depuis des sources officielles et des dépôts sécurisés.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Mettre à jour rapidement :</strong> Maintenez les composants à jour et appliquez les correctifs de sécurité dès qu'ils sont disponibles.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Déployer des patchs virtuels :</strong> Si un patching immédiat est impossible, utilisez un pare-feu d'application web (WAF) pour bloquer les tentatives d'exploitation connues.</span></li>
+                    </ul>
+                `,
+            },
+            analysis: {
+              title: "Analyse Approfondie",
+              content: `
+                    <p>L'incident Log4Shell a servi de prise de conscience brutale sur les risques de la chaîne d'approvisionnement logicielle. La difficulté n'est pas seulement de patcher, mais de savoir ce qu'il faut patcher. Les organisations luttent pour maintenir un inventaire complet de leurs dépendances, y compris les dépendances transitives. Les outils SCA sont devenus indispensables, mais peuvent générer une "fatigue d'alerte". La priorisation basée sur l'exploitabilité réelle est donc cruciale. La gestion de ce risque exige une approche proactive et continue, avec une visibilité et un contrôle sur l'ensemble de la chaîne d'approvisionnement.</p>
+                `,
+            },
+          },
+        },
+        A07: {
+          id: "A07:2021",
+          name: "Défaillances d'Identification et d'Authentification",
+          tabs: {
+            overview: {
+              title: "Vue d'ensemble",
+              content: `
+                    <p class="mb-4">Précédemment "Authentification Défaillante", cette catégorie descend à la 7ème place et inclut désormais des CWEs liés aux échecs d'identification. Elle couvre les faiblesses dans la gestion de l'identité des utilisateurs, de l'authentification et des sessions. Une gestion correcte de ces aspects est cruciale pour se protéger contre les attaques qui mènent à la prise de contrôle de comptes.</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-red-800">Causes Courantes</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Permet les attaques automatisées (credential stuffing, force brute).</li>
+                                <li>Autorise les mots de passe par défaut, faibles ou bien connus.</li>
+                                <li>Processus de récupération de mot de passe faibles.</li>
+                                <li>Authentification multi-facteurs (MFA) absente ou inefficace.</li>
+                                <li>Exposition des identifiants de session dans l'URL.</li>
+                                <li>Invalidation incorrecte de la session après déconnexion.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-yellow-800">Impacts Métier</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Prise de contrôle de comptes utilisateurs ou administrateurs.</li>
+                                <li>Accès non autorisé à des données sensibles.</li>
+                                <li>Détournement de session.</li>
+                                <li>Fraude et pertes financières.</li>
+                            </ul>
+                        </div>
+                    </div>
+                `,
+            },
+            code: {
+              title: "Exemples de Code",
+              content: `
+                    <p class="mb-4">Une faille classique de gestion de session est de ne pas invalider la session existante après une connexion réussie. Cela rend l'application vulnérable à la fixation de session, où un attaquant peut imposer son ID de session à la victime.</p>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2 text-red-700">🔴 Code Vulnérable (Java Servlet)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Après une authentification réussie</span>
+<span class="keyword">public void</span> <span class="function">login</span>(HttpServletRequest request, ...) {
+    <span class="comment">// ... logique d'authentification ...</span>
+    SessionUser user = ...;
+    
+    <span class="comment">// ATTENTION: La session existante n'est PAS invalidée.
+    // L'attaquant peut avoir fourni l'ID de session à la victime.</span>
+    request.getSession().setAttribute(<span class="string">"user"</span>, user);
+}</code></pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2 text-green-700">🟢 Code Sécurisé (Java Servlet)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Après une authentification réussie</span>
+<span class="keyword">public void</span> <span class="function">login</span>(HttpServletRequest request, ...) {
+    <span class="comment">// ... logique d'authentification ...</span>
+    SessionUser user = ...;
+    
+    <span class="comment">// Invalider l'ancienne session pour prévenir la fixation de session</span>
+    HttpSession oldSession = request.getSession(false);
+    <span class="keyword">if</span> (oldSession != null) {
+        oldSession.invalidate();
+    }
+    
+    <span class="comment">// Créer une nouvelle session pour l'utilisateur authentifié</span>
+    HttpSession newSession = request.getSession(true);
+    newSession.setAttribute(<span class="string">"user"</span>, user);
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `,
+            },
+            mitigation: {
+              title: "Stratégies de Mitigation",
+              content: `
+                    <ul class="space-y-3">
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Implémenter le MFA :</strong> Utilisez l'authentification multi-facteurs partout où c'est possible pour vous protéger contre le credential stuffing et la force brute.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Politiques de mots de passe modernes :</strong> Appliquez des politiques de mot de passe basées sur les directives du NIST 800-63b (longueur, complexité) et vérifiez les mots de passe par rapport à des listes de mots de passe connus.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Protéger contre l'énumération :</strong> Utilisez des messages génériques pour les processus d'enregistrement et de récupération de mot de passe.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Limiter les tentatives de connexion :</strong> Mettez en place une limitation de débit pour les tentatives de connexion échouées.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Gestion de session sécurisée :</strong> Utilisez un gestionnaire de session côté serveur qui génère de nouveaux ID de session aléatoires après la connexion et les invalide correctement à la déconnexion.</span></li>
+                    </ul>
+                `,
+            },
+            analysis: {
+              title: "Analyse Approfondie",
+              content: `
+                    <p>La persistance des attaques par bourrage d'identifiants et des pratiques de mots de passe faibles est une préoccupation majeure. Un aspect pertinent est la contradiction entre sécurité et convivialité : des exigences de mot de passe trop strictes peuvent encourager des comportements non sécurisés. Cela souligne la nécessité de solutions qui équilibrent protection et expérience utilisateur, comme le MFA. De plus, les défaillances de gestion de session, comme l'invalidation incorrecte des sessions côté serveur, restent une faille courante mais critique, soulignant l'importance d'une gestion de session robuste et centralisée.</p>
+                `,
+            },
+          },
+        },
+        A08: {
+          id: "A08:2021",
+          name: "Défaillances d'Intégrité Logicielle et de Données",
+          tabs: {
+            overview: {
+              title: "Vue d'ensemble",
+              content: `
+                    <p class="mb-4">Il s'agit d'une nouvelle catégorie qui se concentre sur les hypothèses relatives aux mises à jour logicielles, aux données critiques et aux pipelines CI/CD sans vérification de l'intégrité. Elle inclut désormais la "Désérialisation Non Sécurisée" de 2017. Cette vulnérabilité se produit lorsqu'une application s'appuie sur des plugins, des bibliothèques ou des modules provenant de sources, de dépôts et de réseaux de distribution de contenu (CDN) non fiables, ou lorsque les mises à jour ne sont pas vérifiées par une signature numérique.</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-red-800">Causes Courantes</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Mises à jour logicielles non signées ou non vérifiées.</li>
+                                <li>Pipelines CI/CD non sécurisés.</li>
+                                <li>Désérialisation de données provenant de sources non fiables.</li>
+                                <li>Absence de vérification d'intégrité sur les données entrantes.</li>
+                                <li>Téléchargement de code sans vérification d'intégrité.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-yellow-800">Impacts Métier</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Exécution de code à distance (RCE) et prise de contrôle du système.</li>
+                                <li>Attaques sur la chaîne d'approvisionnement logicielle (ex: SolarWinds).</li>
+                                <li>Altération du logiciel et injection de malwares.</li>
+                                <li>Compromission de l'ensemble de l'infrastructure.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-4 bg-gray-100 rounded-lg">
+                        <h4 class="font-semibold">Exemple notoire : Attaque SolarWinds</h4>
+                        <p class="text-sm mt-2">Des attaquants ont compromis le pipeline de build de SolarWinds pour injecter une porte dérobée dans les mises à jour logicielles de leur produit Orion. Ces mises à jour signées et légitimes ont ensuite été distribuées à des milliers de clients, leur donnant un accès sans précédent à des réseaux gouvernementaux et d'entreprise hautement sécurisés.</p>
+                    </div>
+                `,
+            },
+            code: {
+              title: "Exemples de Code",
+              content: `
+                    <p class="mb-4">La désérialisation non sécurisée est un exemple majeur de cette catégorie. Elle se produit lorsqu'une application désérialise des objets provenant d'une source non fiable sans validation, ce qui peut conduire à l'exécution de code à distance.</p>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2 text-red-700">🔴 Code Vulnérable (Java)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Désérialisation d'un flux d'octets sans validation</span>
+<span class="keyword">public Object</span> <span class="function">deserialize</span>(byte[] buffer) {
+    ObjectInputStream ois = <span class="keyword">new</span> ObjectInputStream(
+        <span class="keyword">new</span> ByteArrayInputStream(buffer)
+    );
+    <span class="comment">// ATTENTION: readObject() peut exécuter du code
+    // si le buffer contient une "gadget chain" malveillante.</span>
+    <span class="keyword">return</span> ois.readObject();
+}</code></pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2 text-green-700">🟢 Code Sécurisé (Java)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Utilisation d'une liste blanche pour restreindre les classes</span>
+<span class="keyword">class</span> <span class="class-name">WhitelistedObjectInputStream</span> <span class="keyword">extends</span> ObjectInputStream {
+    <span class="keyword">protected</span> Class&lt;?&gt; <span class="function">resolveClass</span>(ObjectStreamClass desc) {
+        Set&lt;String&gt; whitelist = Set.of(<span class="string">"com.safe.User"</span>);
+        <span class="keyword">if</span> (!whitelist.contains(desc.getName())) {
+            <span class="keyword">throw new</span> InvalidClassException(<span class="string">"Classe non autorisée"</span>, desc.getName());
+        }
+        <span class="keyword">return super</span>.resolveClass(desc);
+    }
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `,
+            },
+            mitigation: {
+              title: "Stratégies de Mitigation",
+              content: `
+                    <ul class="space-y-3">
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Vérifier les signatures :</strong> Utilisez des signatures numériques pour vérifier que les logiciels et les données proviennent de sources attendues et n'ont pas été altérés.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Sécuriser le pipeline CI/CD :</strong> Assurez une ségrégation, une configuration et un contrôle d'accès appropriés pour garantir l'intégrité du code.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Utiliser des dépôts de confiance :</strong> Assurez-vous que les dépendances proviennent de dépôts fiables. Envisagez un dépôt interne approuvé.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Prévenir la désérialisation non sécurisée :</strong> Évitez de désérialiser des données de sources non fiables. Si c'est inévitable, utilisez des filtres de désérialisation et une liste blanche de classes autorisées.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Utiliser des formats de données sécurisés :</strong> Préférez des formats comme JSON qui ne sont pas exécutables par nature.</span></li>
+                    </ul>
+                `,
+            },
+            analysis: {
+              title: "Analyse Approfondie",
+              content: `
+                    <p>L'émergence de cette catégorie reflète une prise de conscience des menaces complexes ciblant la chaîne d'approvisionnement. L'attaque SolarWinds a démontré comment la compromission d'un seul maillon peut avoir des conséquences dévastatrices. La sécurité ne se limite plus au code de l'application, mais doit s'étendre à l'ensemble du processus de développement et de déploiement. La désérialisation non sécurisée, en particulier, est une menace subtile mais puissante. Une approche proactive de la sécurité de la chaîne d'approvisionnement, avec des signatures numériques et des contrôles d'intégrité, est indispensable.</p>
+                `,
+            },
+          },
+        },
+        A09: {
+          id: "A09:2021",
+          name: "Défaillances de Journalisation et de Surveillance",
+          tabs: {
+            overview: {
+              title: "Vue d'ensemble",
+              content: `
+                    <p class="mb-4">Cette catégorie monte à la 9ème place et a été élargie. Elle est cruciale car elle est le fondement de la détection d'incidents, de l'alerte et de l'analyse forensique. Sans une journalisation et une surveillance adéquates, les brèches peuvent passer inaperçues pendant de longues périodes, aggravant considérablement les dommages. Une bonne journalisation est souvent la seule preuve d'une attaque.</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-red-800">Causes Courantes</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Événements auditables non journalisés (connexions, échecs).</li>
+                                <li>Messages d'erreur ou de log inadéquats ou inexistants.</li>
+                                <li>Journaux non surveillés pour les activités suspectes.</li>
+                                <li>Journaux stockés localement sans protection contre l'altération.</li>
+                                <li>Seuils d'alerte inefficaces.</li>
+                                <li>Journalisation de données sensibles (mots de passe, cartes de crédit).</li>
+                            </ul>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-yellow-800">Impacts Métier</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Détection tardive ou inexistante des brèches.</li>
+                                <li>Incapacité à déterminer la cause et l'étendue d'une attaque.</li>
+                                <li>Difficulté à prouver la responsabilité.</li>
+                                <li>Amendes réglementaires pour non-conformité.</li>
+                                <li>Exposition de données sensibles via les journaux.</li>
+                            </ul>
+                        </div>
+                    </div>
+                `,
+            },
+            code: {
+              title: "Exemples de Code",
+              content: `
+                    <p class="mb-4">Une erreur courante est de journaliser des informations sensibles directement dans les fichiers de log. Si ces logs sont compromis, cela conduit à une fuite de données.</p>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2 text-red-700">🔴 Code Vulnérable (Java)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Journalisation de l'objet de requête complet</span>
+<span class="keyword">public void</span> <span class="function">processPayment</span>(HttpServletRequest request) {
+    <span class="comment">// ATTENTION: La requête peut contenir des mots de passe,
+    // des numéros de carte de crédit, des jetons de session, etc.</span>
+    logger.info(<span class="string">"Requête de paiement reçue: {}"</span>,
+        new Gson().toJson(request.getParameterMap()));
+}</code></pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2 text-green-700">🟢 Code Sécurisé (Java)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Journalisation sélective et masquage des données</span>
+<span class="keyword">public void</span> <span class="function">processPayment</span>(HttpServletRequest request) {
+    String orderId = request.getParameter(<span class="string">"orderId"</span>);
+    String userId = request.getParameter(<span class="string">"userId"</span>);
+    String ccNumber = request.getParameter(<span class="string">"ccNumber"</span>);
+    
+    <span class="comment">// Journaliser uniquement les informations non sensibles
+    // ou masquées nécessaires à l'audit.</span>
+    logger.info(<span class="string">"Paiement pour commande {}, utilisateur {}, carte: {}"</span>,
+        orderId, userId, maskCreditCard(ccNumber));
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `,
+            },
+            mitigation: {
+              title: "Stratégies de Mitigation",
+              content: `
+                    <ul class="space-y-3">
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Journaliser les événements clés :</strong> Assurez-vous que les connexions, les échecs, les transactions de grande valeur et les échecs de contrôle d'accès sont journalisés avec un contexte suffisant.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Éviter les données sensibles :</strong> Ne journalisez jamais de mots de passe, de numéros de carte de crédit ou d'autres données sensibles. Masquez ou expurgez les données si nécessaire.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Protéger les journaux :</strong> Assurez-vous que les journaux sont protégés contre toute modification et qu'ils sont intégrés dans un système de gestion centralisé (SIEM).</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Mettre en place des alertes :</strong> Établissez des alertes et des processus de réponse efficaces pour les activités suspectes détectées dans les journaux.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Format structuré :</strong> Générez des journaux dans un format structuré (ex: JSON) pour faciliter leur consommation par des outils automatisés.</span></li>
+                    </ul>
+                `,
+            },
+            analysis: {
+              title: "Analyse Approfondie",
+              content: `
+                    <p>Cette catégorie est souvent négligée car elle ne représente pas une vulnérabilité exploitable directement. Cependant, son absence transforme des incidents mineurs en brèches majeures. L'un des plus grands défis est le volume de données : trop de logs peuvent être aussi inutiles que pas assez s'ils ne sont pas correctement filtrés et analysés. Une stratégie de journalisation bien définie, axée sur les événements de sécurité critiques et intégrée à un SIEM avec des alertes pertinentes, est fondamentale pour une posture de sécurité mature.</p>
+                `,
+            },
+          },
+        },
+        A10: {
+          id: "A10:2021",
+          name: "Falsification de Requête Côté Serveur (SSRF)",
+          tabs: {
+            overview: {
+              title: "Vue d'ensemble",
+              content: `
+                    <p class="mb-4">Le SSRF est une nouvelle catégorie qui entre directement dans le Top 10. Les failles SSRF se produisent lorsqu'une application web récupère une ressource distante sans valider l'URL fournie par l'utilisateur. Elle permet à un attaquant de forcer l'application à envoyer une requête élaborée à une destination inattendue, même lorsque l'application est protégée par un pare-feu ou un VPN. La prévalence de cette attaque a augmenté avec la popularité des architectures cloud et des microservices.</p>
+                    <div class="grid md:grid-cols-2 gap-4">
+                        <div class="bg-red-50 border border-red-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-red-800">Causes Courantes</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Validation d'entrée insuffisante sur l'URL fournie par l'utilisateur.</li>
+                                <li>Listes de blocage (blacklists) ou expressions régulières facilement contournables.</li>
+                                <li>Confiance excessive dans les services internes.</li>
+                                <li>Fonctionnalités permettant de récupérer des ressources via URL (webhooks, importateurs de documents).</li>
+                            </ul>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                            <h4 class="font-semibold text-yellow-800">Impacts Métier</h4>
+                            <ul class="list-disc list-inside mt-2 text-sm">
+                                <li>Scan des ports et des réseaux internes.</li>
+                                <li>Exfiltration de données sensibles et de métadonnées cloud.</li>
+                                <li>Interaction avec des services internes non exposés publiquement.</li>
+                                <li>Exécution de code à distance sur des systèmes internes.</li>
+                            </ul>
+                        </div>
+                    </div>
+                `,
+            },
+            code: {
+              title: "Exemples de Code",
+              content: `
+                    <p class="mb-4">Une faille SSRF se produit lorsqu'une application utilise une URL fournie par un utilisateur pour faire une requête côté serveur sans la valider correctement.</p>
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold mb-2 text-red-700">🔴 Code Vulnérable (Java)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// L'application récupère le contenu d'une URL fournie par l'utilisateur</span>
+<span class="keyword">public String</span> <span class="function">fetchUrlContent</span>(String urlString) {
+    URL url = <span class="keyword">new</span> URL(urlString);
+    <span class="comment">// ATTENTION: Pas de validation de 'urlString'.
+    // Un attaquant peut fournir une URL interne comme:
+    // "http://169.254.169.254/latest/meta-data/" (métadonnées AWS)
+    // ou "file:///etc/passwd"</span>
+    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+    <span class="comment">// ... lire et retourner le contenu ...</span>
+}</code></pre>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold mb-2 text-green-700">🟢 Code Sécurisé (Java)</h4>
+                            <div class="code-block">
+                                <pre><code><span class="comment">// Implémentation d'une liste blanche d'hôtes et de protocoles</span>
+<span class="keyword">public String</span> <span class="function">fetchUrlContent</span>(String urlString) {
+    URL url = <span class="keyword">new</span> URL(urlString);
+    
+    <span class="comment">// VÉRIFICATION: Appliquer une liste blanche stricte</span>
+    String host = url.getHost();
+    String protocol = url.getProtocol();
+    <span class="keyword">if</span> (!protocol.equals(<span class="string">"https"</span>) || !isAllowedHost(host)) {
+        <span class="keyword">throw new</span> SecurityException(<span class="string">"Hôte ou protocole non autorisé"</span>);
+    }
+    
+    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+    <span class="comment">// ... lire et retourner le contenu ...</span>
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `,
+            },
+            mitigation: {
+              title: "Stratégies de Mitigation",
+              content: `
+                    <ul class="space-y-3">
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Segmentation du réseau :</strong> Isolez le système qui effectue les requêtes distantes pour limiter l'impact en cas de compromission.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Appliquer une liste blanche :</strong> Côté application, validez toutes les entrées utilisateur et appliquez une liste blanche stricte de protocoles, de domaines et de ports autorisés.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Désactiver les redirections HTTP :</strong> Empêchez l'application de suivre les redirections pour éviter les contournements.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Ne pas exposer les réponses brutes :</strong> Ne renvoyez jamais la réponse brute du serveur distant à l'utilisateur, car elle pourrait contenir des informations sensibles.</span></li>
+                        <li class="flex items-start"><span class="text-green-500 mr-3 text-xl">✅</span><span><strong>Utiliser des pare-feu :</strong> Appliquez une politique de "refus par défaut" au niveau du pare-feu pour bloquer tout trafic sortant non essentiel.</span></li>
+                    </ul>
+                `,
+            },
+            analysis: {
+              title: "Analyse Approfondie",
+              content: `
+                    <p>L'inclusion du SSRF dans le Top 10 est une réponse directe à la montée en puissance des architectures cloud et des microservices. Dans ces environnements, les applications interagissent constamment avec d'autres services internes, et les frontières de confiance sont plus floues. Le SSRF exploite cette connectivité. La mitigation repose sur une défense en profondeur : la validation stricte des entrées côté application (liste blanche, pas liste noire) doit être complétée par une segmentation rigoureuse du réseau pour limiter ce qu'un serveur compromis peut atteindre.</p>
+                `,
+            },
+          },
+        },
+      };
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const nav = document.getElementById("main-nav");
+        const content = document.getElementById("main-content");
+        let activeChart = null;
+        let activeNavItem = null;
+
+        const navItems = [
+          { id: "introduction", name: "🏠 Introduction" },
+          { id: "evolution", name: "📈 Évolution 2017-2021" },
+          ...Object.keys(owaspData)
+            .filter((key) => key.startsWith("A"))
+            .sort((a, b) => parseInt(a.substring(1)) - parseInt(b.substring(1)))
+            .map((key) => ({
+              id: key,
+              name: `${owaspData[key].id.split(":")[0]}: ${
+                owaspData[key].name
+              }`,
+            })),
+        ];
+
+        function renderNav() {
+          navItems.forEach((item) => {
+            const link = document.createElement("a");
+            link.href = "#";
+            link.dataset.id = item.id;
+            link.className =
+              "nav-link block p-2 rounded-md text-gray-600 font-medium text-sm";
+            link.innerHTML = item.name;
+            link.onclick = (e) => {
+              e.preventDefault();
+              navigateTo(item.id);
+            };
+            nav.appendChild(link);
+          });
+        }
+
+        function navigateTo(id) {
+          if (activeChart) {
+            activeChart.destroy();
+            activeChart = null;
+          }
+
+          const data = owaspData[id];
+          content.innerHTML = "";
+          content.classList.add("content-fade-in");
+
+          const newActiveNavItem = nav.querySelector(`[data-id="${id}"]`);
+          if (activeNavItem) {
+            activeNavItem.classList.remove("active");
+          }
+          if (newActiveNavItem) {
+            newActiveNavItem.classList.add("active");
+            activeNavItem = newActiveNavItem;
+          }
+
+          const title = document.createElement("h2");
+          title.className = "text-3xl font-bold text-gray-800 mb-2";
+          title.textContent = data.title || `${data.id}: ${data.name}`;
+          content.appendChild(title);
+
+          if (data.tabs) {
+            renderTabs(data.tabs);
+          } else {
+            const contentDiv = document.createElement("div");
+            contentDiv.innerHTML = data.content;
+            content.appendChild(contentDiv);
+            if (id === "evolution") {
+              createEvolutionChart();
+            }
+          }
+
+          setTimeout(() => content.classList.remove("content-fade-in"), 500);
+        }
+
+        function renderTabs(tabsData) {
+          const tabContainer = document.createElement("div");
+          tabContainer.className = "flex border-b border-gray-200 mb-6";
+          const tabContentContainer = document.createElement("div");
+
+          const tabIds = Object.keys(tabsData);
+
+          tabIds.forEach((tabId) => {
+            const button = document.createElement("button");
+            button.className =
+              "tab-button py-2 px-4 text-gray-500 font-semibold";
+            button.textContent = tabsData[tabId].title;
+            button.onclick = () => {
+              tabContainer
+                .querySelectorAll(".tab-button")
+                .forEach((btn) => btn.classList.remove("active"));
+              button.classList.add("active");
+              tabContentContainer.innerHTML = tabsData[tabId].content;
+            };
+            tabContainer.appendChild(button);
+          });
+
+          content.appendChild(tabContainer);
+          content.appendChild(tabContentContainer);
+
+          tabContainer.querySelector(".tab-button").click();
+        }
+
+        function createEvolutionChart() {
+          const ctx = document
+            .getElementById("evolutionChart")
+            .getContext("2d");
+          if (!ctx) return;
+
+          const data = {
+            labels: [
+              "A01: Contrôle d'Accès Défaillant",
+              "A02: Défaillances Cryptographiques",
+              "A03: Injection",
+              "A04: Conception Dangereuse",
+              "A05: Mauvaise Config. de Sécurité",
+              "A06: Composants Vulnérables",
+              "A07: Défaillances d'Authentification",
+              "A08: Défaillances d'Intégrité",
+              "A09: Défaillances de Journalisation",
+              "A10: SSRF",
+            ],
+            datasets: [
+              {
+                label: "Rang 2017",
+                data: [5, 3, 1, null, 6, 9, 2, 8, 10, null],
+                backgroundColor: "rgba(156, 163, 175, 0.6)",
+                borderColor: "rgba(156, 163, 175, 1)",
+                borderWidth: 1,
+                barPercentage: 0.6,
+              },
+              {
+                label: "Rang 2021",
+                data: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                backgroundColor: "rgba(96, 165, 250, 0.6)",
+                borderColor: "rgba(96, 165, 250, 1)",
+                borderWidth: 1,
+                barPercentage: 0.6,
+              },
+            ],
+          };
+
+          const notes = [
+            "2017: A5 -> 2021: A1 (Montée)",
+            "2017: A3 (Expo. Données Sensibles) -> 2021: A2 (Renommée/Montée)",
+            "2017: A1 & A7 (XSS) -> 2021: A3 (Consolidée/Descendue)",
+            "Nouvelle catégorie en 2021",
+            "2017: A6 & A4 (XXE) -> 2021: A5 (Consolidée/Montée)",
+            "2017: A9 -> 2021: A6 (Renommée/Montée)",
+            "2017: A2 -> 2021: A7 (Renommée/Descendue)",
+            "2017: A8 (Désérialisation) -> 2021: A8 (Nouvelle/Consolidée)",
+            "2017: A10 -> 2021: A9 (Renommée/Montée)",
+            "Nouvelle catégorie en 2021",
+          ];
+
+          activeChart = new Chart(ctx, {
+            type: "bar",
+            data: data,
+            options: {
+              indexAxis: "y",
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                x: {
+                  beginAtZero: true,
+                  reverse: true,
+                  title: {
+                    display: true,
+                    text: "Classement (1 = Plus critique)",
+                  },
+                },
+                y: {
+                  ticks: {
+                    font: {
+                      size: 10,
+                    },
+                  },
+                },
+              },
+              plugins: {
+                legend: {
+                  position: "top",
+                },
+                tooltip: {
+                  callbacks: {
+                    afterLabel: function (context) {
+                      return notes[context.dataIndex] || "";
+                    },
+                  },
+                },
+                title: {
+                  display: true,
+                  text: "Comparaison des classements OWASP Top 10: 2017 vs 2021",
+                  font: {
+                    size: 16,
+                  },
+                },
+              },
+            },
+          });
+        }
+
+        renderNav();
+        navigateTo("introduction");
+      });
+    </script>
+  </body>
+</html>
